@@ -25,8 +25,9 @@ test('원본 내장 보존 및 화면 점검 로직이 Python 기준과 일치',
  assert.equal(source.standard,fs.readFileSync(path.join(root,'rules/standard_clauses.md'),'utf8'));
  const names=fs.readdirSync(path.join(root,'data/drafts')).filter(n=>n.endsWith('.md')).sort();
  assert.equal(names.length,8);
- assert.deepEqual(source.drafts.map(d=>d.name),names.map(n=>n.slice(0,-3)));
- for(const d of source.drafts) assert.equal(d.text,fs.readFileSync(path.join(root,'data/drafts',d.name+'.md'),'utf8'));
+ assert.equal(source.drafts.length,11,'시험 8건 + 실제 AI 3건');
+ assert.deepEqual(source.drafts.map(d=>d.name),[...names.map(n=>n.slice(0,-3)),'claude','gemini','codex']);
+ for(const d of source.drafts) assert.equal(d.text,fs.readFileSync(path.join(root,d.name.startsWith('draft_')?'data/drafts':'data/ai_compare',d.name+'.md'),'utf8'));
  const context=vm.createContext({SOURCE:source});
  vm.runInContext(html.match(/<script id="checker-logic">([\s\S]*?)<\/script>/)[1],context);
  const extra=['','보수는 대출 실행 시 지급한다. 소개 자료와 소개서를 만든다.','  # 대출 승인을 보장한다','알선하지 아니한다. 투자 유치를 보장한다.','○○ OO XXX __ [법원] {{금액}}','<img src=x onerror=alert(1)> 대출 승인을 보장한다.'];
@@ -39,5 +40,5 @@ test('원본 내장 보존 및 화면 점검 로직이 Python 기준과 일치',
  });
  const standards=JSON.parse(execFileSync('python3',['-c','import json; import validate_drafts as v; print(json.dumps(v.load_standard(),ensure_ascii=False))'],{cwd:root,encoding:'utf8'}));
  assert.deepEqual(JSON.parse(vm.runInContext('JSON.stringify(STANDARD)',context)),standards);
- console.log('8개 초안 + 6개 경계 입력 일치, 원본 문서/권장 문구 보존');
+ console.log('11개 초안 + 6개 경계 입력 일치, 원본 문서/권장 문구 보존');
 });
