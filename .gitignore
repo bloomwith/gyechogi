@@ -1,0 +1,18 @@
+# 비밀정보
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+.hermes/
+
+# 실제 고객 자료는 절대 올리지 않음
+data/real/
+*.docx
+*.pdf
+
+# 시스템·도구
+.DS_Store
+__pycache__/
+*.pyc
+node_modules/
