@@ -1,0 +1,43 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const vm=require('node:vm');
+const {execFileSync}=require('node:child_process');
+const path=require('node:path');
+const root=path.resolve(__dirname,'..');
+test('원문 보기는 기본 접힘이며 제목·강조·표를 안전하게 표시',()=>{
+ const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
+ const script=html.match(/<script id="markdown-renderer">([\s\S]*?)<\/script>/);
+ assert.ok(script,'마크다운 표시 함수가 필요합니다');
+ const context=vm.createContext({});vm.runInContext(script[1],context);
+ context.input='# 제목\n\n**굵게**와 *강조*, `코드`\n\n| 항목 | 값 |\n|---|---|\n| R1 | 보수 |\n\n- 항목\n> 참고\n<img src=x onerror=alert(1)>';
+ const rendered=vm.runInContext('renderMarkdown(input)',context);
+ for(const part of ['<h2>제목</h2>','<strong>굵게</strong>','<em>강조</em>','<code>코드</code>','<table>','<th scope="col">항목</th>','<td>R1</td>','<li>항목</li>','<blockquote>참고</blockquote>','&lt;img']) assert.ok(rendered.includes(part),part);
+ assert.ok(!rendered.includes('<img'));
+ assert.match(html,/<details id="reference-details">/);
+});
+test('원본 내장 보존 및 화면 점검 로직이 Python 기준과 일치',()=>{
+ const file=path.join(root,'index.html');
+ assert.ok(fs.existsSync(file),'index.html 구현이 필요합니다');
+ const html=fs.readFileSync(file,'utf8');
+ const source=JSON.parse(html.match(/<script id="source-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
+ assert.equal(source.rules,fs.readFileSync(path.join(root,'rules/review_rules.md'),'utf8'));
+ assert.equal(source.standard,fs.readFileSync(path.join(root,'rules/standard_clauses.md'),'utf8'));
+ const names=fs.readdirSync(path.join(root,'data/drafts')).filter(n=>n.endsWith('.md')).sort();
+ assert.equal(names.length,8);
+ assert.deepEqual(source.drafts.map(d=>d.name),names.map(n=>n.slice(0,-3)));
+ for(const d of source.drafts) assert.equal(d.text,fs.readFileSync(path.join(root,'data/drafts',d.name+'.md'),'utf8'));
+ const context=vm.createContext({SOURCE:source});
+ vm.runInContext(html.match(/<script id="checker-logic">([\s\S]*?)<\/script>/)[1],context);
+ const extra=['','보수는 대출 실행 시 지급한다. 소개 자료와 소개서를 만든다.','  # 대출 승인을 보장한다','알선하지 아니한다. 투자 유치를 보장한다.','○○ OO XXX __ [법원] {{금액}}','<img src=x onerror=alert(1)> 대출 승인을 보장한다.'];
+ const texts=[...source.drafts.map(d=>d.text),...extra];
+ const expected=JSON.parse(execFileSync('python3',['-c','import json,sys; import validate_drafts as v; print(json.dumps([{ "codes":v.review(t)[0],"detail":v.review(t)[1],"verdict":v.verdict(v.review(t)[0])} for t in json.load(sys.stdin)],ensure_ascii=False))'],{cwd:root,input:JSON.stringify(texts),encoding:'utf8'}));
+ texts.forEach((text,i)=>{
+   context.input=text;
+   const actual=JSON.parse(vm.runInContext('JSON.stringify(review(input))',context));
+   for(const key of ['codes','detail','verdict']) assert.deepEqual(actual[key],expected[i][key],`${i}: ${key}`);
+ });
+ const standards=JSON.parse(execFileSync('python3',['-c','import json; import validate_drafts as v; print(json.dumps(v.load_standard(),ensure_ascii=False))'],{cwd:root,encoding:'utf8'}));
+ assert.deepEqual(JSON.parse(vm.runInContext('JSON.stringify(STANDARD)',context)),standards);
+ console.log('8개 초안 + 6개 경계 입력 일치, 원본 문서/권장 문구 보존');
+});
